@@ -38,13 +38,12 @@ composer install --no-dev
 
 
 Step 2: Run Landlord Migrations
-Bash
+```
 php artisan migrate
 
 
 Step 3: Create First Organization
 Open Laravel tinker:
-
 ```
 php artisan tinker
 
@@ -104,7 +103,6 @@ curl -X POST http://localhost:8000/api/auth/login
 
 2. Phone OTP Verification
 ```
-
 Initiate OTP
 curl -X POST http://localhost:8000/api/auth/phone/initiate
 
