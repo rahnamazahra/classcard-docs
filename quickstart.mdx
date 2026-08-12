@@ -27,21 +27,19 @@ A complete, production-ready multi-tenancy foundation with enterprise-grade auth
 
 # Step 1: Install Dependencies
 
-Run the following commands in your terminal in project:
 composer install
 
-Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+## 🎯Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+
 composer install --no-dev
 
 # Step 2: Run Landlord Migrations
 php artisan migrate
-This creates the central tables including organizations, sessions, cache, and jobs.
 
 # Step 3: Create First Organization
-Open Laravel Tinker to create your first tenant:
 php artisan tinker
 
-Run the following script inside tinker:
+## 🎯Run the following script inside tinker:
 
 use App\Services\TenantManager;
 $manager = new TenantManager();
@@ -62,8 +60,6 @@ echo "ID: {$org->id}\n";
 
 exit;
 
-This automatically sets up a dedicated database schema, runs migrations, and seeds default roles and permissions.
-
 
 # Step 4: Register Tenant Middleware
 Edit your routes/api.php file to protect routes with the tenant middleware:
@@ -78,7 +74,6 @@ Route::middleware(TenantMiddleware::class)->group(function () {
 });
 
 # Step 5: Test Multi-Tenancy
-Start the server and test the subdomain routing:
 
 # Terminal : Test request
 curl -H "Host: acme.localhost:8000" http://localhost:8000/api/test
