@@ -13,9 +13,19 @@
     "dark": "#0F766E"
   },
   "navigation": [
-    "index",
-    "quickstart",
-    "overview",
-    "features"
+    {
+      "group": "Get Started",
+      "pages": [
+        "index",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "Classcard Documentation",
+      "pages": [
+        "overview",
+        "features"
+      ]
+    }
   ]
 }
