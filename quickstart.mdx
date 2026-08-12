@@ -1,57 +1,67 @@
----
 title: 'Quick Start Guide'
 description: 'Get up and running with the Classcard backend in 5 minutes.'
----
-
-# Classcard Backend - Quick Start Guide
-
+Classcard Backend - Quick Start Guide
 A complete, production-ready multi-tenancy foundation with enterprise-grade authentication and authorization for the Classcard education platform.
 
-## 🎯 What's Been Built
+🎯 What's Been Built
+Schema-per-Tenant multi-tenancy (no third-party packages)
 
-* **Schema-per-Tenant** multi-tenancy (no third-party packages)
-* Subdomain-based tenant routing
-* **5-method authentication** (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
-* JWT tokens with refresh token rotation and reuse detection
-* Granular **RBAC** with 7 pre-configured roles and 66 permissions
-* Parent-guardian relationship management
-* Immutable audit logging with hash chains
-* Attendance time window management
-* Complete database schema (13 migrations)
-* 10 tenant models with relationships
-* 4 core authentication services
+Subdomain-based tenant routing
 
----
+5-method authentication (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
 
-## 🚀 Getting Started (5 Minutes)
+JWT tokens with refresh token rotation and reuse detection
 
-# Step 1: Install Dependencies
+Granular RBAC with 7 pre-configured roles and 66 permissions
 
+Parent-guardian relationship management
+
+Immutable audit logging with hash chains
+
+Attendance time window management
+
+Complete database schema (13 migrations)
+
+10 tenant models with relationships
+
+4 core authentication services
+
+🚀 Getting Started (5 Minutes)
+Step 1: Install Dependencies
+```
+cd c:\xampp\htdocs\projects\school\school-manager-backend
 composer install
 
-## 🎯Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+🎯 Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
 
+```
 composer install --no-dev
 
-# Step 2: Run Landlord Migrations
+Step 2: Run Landlord Migrations
+```
 php artisan migrate
 
-# Step 3: Create First Organization
+Step 3: Create First Organization
+Open Laravel tinker:
+
+```
 php artisan tinker
 
-## 🎯Run the following script inside tinker:
+Run the following script inside tinker:
 
+```
 use App\Services\TenantManager;
+
 $manager = new TenantManager();
 
 $org =$manager->createOrganization([
-    'name' => 'Acme Academy',
-    'subdomain' => 'acme',
-    'email' => 'admin@acme.com',
-    'phone' => '+1234567890',
-    'currency' => 'USD',
-    'timezone' => 'America/New_York',
-    'isolation_strategy' => 'schema',
+'name' => 'Acme Academy',
+'subdomain' => 'acme',
+'email' => 'admin@acme.com',
+'phone' => '+1234567890',
+'currency' => 'USD',
+'timezone' => 'America/New_York',
+'isolation_strategy' => 'schema',
 ]);
 
 echo "Organization created: {$org->name}\n";
@@ -60,34 +70,52 @@ echo "ID: {$org->id}\n";
 
 exit;
 
-
-# Step 4: Register Tenant Middleware
+Step 4: Register Tenant Middleware
 Edit your routes/api.php file to protect routes with the tenant middleware:
 
+```
 use App\Http\Middleware\TenantMiddleware;
 use App\Services\TenantContext;
 
 Route::middleware(TenantMiddleware::class)->group(function () {
-    Route::get('/test', function () {
-        return ['organization' => TenantContext::getOrganization()];
-    });
+Route::get('/test', function () {
+return ['organization' => TenantContext::getOrganization()];
+});
 });
 
-# Step 5: Test Multi-Tenancy
-
-# Terminal : Test request
+Step 5: Test Multi-Tenancy
+```
 curl -H "Host: acme.localhost:8000" http://localhost:8000/api/test
+
 🔐 Testing Authentication
 1. Email + Password Login
+```
+curl -X POST http://localhost:8000/api/auth/login
+
+-H "Content-Type: application/json"
+
+-H "Host: acme.localhost:8000"
+
+-d '{
+"email": "user@example.com",
+"password": "password123"
+}'
 
 2. Phone OTP Verification
-# Initiate OTP
-curl -X POST http://localhost:8000/api/auth/phone/initiate \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "+1234567890"}'
+```
 
-# Verify OTP
-curl -X POST http://localhost:8000/api/auth/phone/verify \
-  -H "Content-Type: application/json" \
-  -H "Host: acme.localhost:8000" \
-  -d '{"phone": "+1234567890", "code": "123456"}'
+Initiate OTP
+curl -X POST http://localhost:8000/api/auth/phone/initiate
+
+-H "Content-Type: application/json"
+
+-d '{"phone": "+1234567890"}'
+
+Verify OTP
+curl -X POST http://localhost:8000/api/auth/phone/verify
+
+-H "Content-Type: application/json"
+
+-H "Host: acme.localhost:8000"
+
+-d '{"phone": "+1234567890", "code": "123456"}'
