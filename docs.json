@@ -16,16 +16,15 @@
     {
       "group": "Get Started",
       "pages": [
-        "index"
+        "index",
+        "quickstart"
       ]
     },
     {
       "group": "Classcard Documentation",
       "pages": [
         "overview",
-        "features",
-        "workflows",
-        "requirements"
+        "features"
       ]
     }
   ]
