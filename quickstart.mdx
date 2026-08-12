@@ -37,10 +37,12 @@ composer install
 composer install --no-dev
 
 
+
 ### Step 2: Run Landlord Migrations
 
 ```
 php artisan migrate
+
 
 
 ### Step 3: Create First Organization
@@ -72,6 +74,8 @@ echo "ID: {$org->id}\n";
 
 exit;
 
+
+
 ### Step 4: Register Tenant Middleware
 Edit your routes/api.php file to protect routes with the tenant middleware:
 
@@ -85,7 +89,9 @@ return ['organization' => TenantContext::getOrganization()];
 });
 });
 
-###Step 5: Test Multi-Tenancy
+
+
+### Step 5: Test Multi-Tenancy
 
 ```
 curl -H "Host: acme.localhost:8000" http://localhost:8000/api/test
