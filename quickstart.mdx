@@ -1,46 +1,46 @@
+---
 title: 'Quick Start Guide'
 description: 'Get up and running with the Classcard backend in 5 minutes.'
-Classcard Backend - Quick Start Guide
+---
+
+# Classcard Backend - Quick Start Guide
+
 A complete, production-ready multi-tenancy foundation with enterprise-grade authentication and authorization for the Classcard education platform.
 
-🎯 What's Been Built
-Schema-per-Tenant multi-tenancy (no third-party packages)
+## 🎯 What's Been Built
 
-Subdomain-based tenant routing
+* **Schema-per-Tenant** multi-tenancy (no third-party packages)
+* Subdomain-based tenant routing
+* **5-method authentication** (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
+* JWT tokens with refresh token rotation and reuse detection
+* Granular **RBAC** with 7 pre-configured roles and 66 permissions
+* Parent-guardian relationship management
+* Immutable audit logging with hash chains
+* Attendance time window management
+* Complete database schema (13 migrations)
+* 10 tenant models with relationships
+* 4 core authentication services
 
-5-method authentication (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
+---
 
-JWT tokens with refresh token rotation and reuse detection
+## 🚀 Getting Started (5 Minutes)
 
-Granular RBAC with 7 pre-configured roles and 66 permissions
+### Step 1: Install Dependencies
 
-Parent-guardian relationship management
-
-Immutable audit logging with hash chains
-
-Attendance time window management
-
-Complete database schema (13 migrations)
-
-10 tenant models with relationships
-
-4 core authentication services
-
-🚀 Getting Started (5 Minutes)
-Step 1: Install Dependencies
 ```
 cd c:\xampp\htdocs\projects\school\school-manager-backend
 composer install
 
-
-
 🎯 Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+
+```
 composer install --no-dev
 
 
-# Step 2: Run Landlord Migrations
-```
+Step 2: Run Landlord Migrations
+Bash
 php artisan migrate
+
 
 Step 3: Create First Organization
 Open Laravel tinker:
