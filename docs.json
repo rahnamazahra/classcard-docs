@@ -2,10 +2,25 @@
   "$schema": "https://mintlify.com/schema.json",
   "name": "Pixy Group",
   "theme": "mint",
+  "colors": {
+    "primary": "#0D9488",
+    "light": "#2DD4BF",
+    "dark": "#0F766E"
+  },
   "navigation": [
-    "index",
-    "quickstart",
-    "overview",
-    "features"
+    {
+      "group": "Get Started",
+      "pages": [
+        "index",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "Classcard Documentation",
+      "pages": [
+        "overview",
+        "features"
+      ]
+    }
   ]
 }
