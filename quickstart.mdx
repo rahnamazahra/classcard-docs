@@ -1,47 +1,99 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: 'Quick Start Guide'
+description: 'Get up and running with the Classcard backend in 5 minutes.'
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+# Classcard Backend - Quick Start Guide
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+A complete, production-ready multi-tenancy foundation with enterprise-grade authentication and authorization for the Classcard education platform.
 
-## Prerequisites
+## 🎯 What's Been Built
 
-Before you begin, you must have:
+* **Schema-per-Tenant** multi-tenancy (no third-party packages)
+* Subdomain-based tenant routing
+* **5-method authentication** (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
+* JWT tokens with refresh token rotation and reuse detection
+* Granular **RBAC** with 7 pre-configured roles and 66 permissions
+* Parent-guardian relationship management
+* Immutable audit logging with hash chains
+* Attendance time window management
+* Complete database schema (13 migrations)
+* 10 tenant models with relationships
+* 4 core authentication services
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+---
 
-## Get started
+## 🚀 Getting Started (5 Minutes)
 
-<Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+### Step 1: Install Dependencies
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+Run the following commands in your terminal in project:
+composer install
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+composer install --no-dev
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+Step 2: Run Landlord Migrations
+php artisan migrate
+This creates the central tables including organizations, sessions, cache, and jobs.
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+Step 3: Create First Organization
+Open Laravel Tinker to create your first tenant:
+php artisan tinker
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+Run the following script inside tinker:
+
+use App\Services\TenantManager;
+$manager = new TenantManager();
+
+$org =$manager->createOrganization([
+    'name' => 'Acme Academy',
+    'subdomain' => 'acme',
+    'email' => 'admin@acme.com',
+    'phone' => '+1234567890',
+    'currency' => 'USD',
+    'timezone' => 'America/New_York',
+    'isolation_strategy' => 'schema',
+]);
+
+echo "Organization created: {$org->name}\n";
+echo "Subdomain: {$org->subdomain}\n";
+echo "ID: {$org->id}\n";
+
+exit;
+
+This automatically sets up a dedicated database schema, runs migrations, and seeds default roles and permissions.
+
+
+Step 4: Register Tenant Middleware
+Edit your routes/api.php file to protect routes with the tenant middleware:
+
+use App\Http\Middleware\TenantMiddleware;
+use App\Services\TenantContext;
+
+Route::middleware(TenantMiddleware::class)->group(function () {
+    Route::get('/test', function () {
+        return ['organization' => TenantContext::getOrganization()];
+    });
+});
+
+
+Step 5: Test Multi-Tenancy
+Start the server and test the subdomain routing:
+
+# Terminal : Test request
+curl -H "Host: acme.localhost:8000" http://localhost:8000/api/test
+🔐 Testing Authentication
+1. Email + Password Login
+
+2. Phone OTP Verification
+# Initiate OTP
+curl -X POST http://localhost:8000/api/auth/phone/initiate \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+1234567890"}'
+
+# Verify OTP
+curl -X POST http://localhost:8000/api/auth/phone/verify \
+  -H "Content-Type: application/json" \
+  -H "Host: acme.localhost:8000" \
+  -d '{"phone": "+1234567890", "code": "123456"}'
