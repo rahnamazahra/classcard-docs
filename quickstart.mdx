@@ -33,11 +33,11 @@ composer install
 Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
 composer install --no-dev
 
-Step 2: Run Landlord Migrations
+# Step 2: Run Landlord Migrations
 php artisan migrate
 This creates the central tables including organizations, sessions, cache, and jobs.
 
-Step 3: Create First Organization
+# Step 3: Create First Organization
 Open Laravel Tinker to create your first tenant:
 php artisan tinker
 
@@ -65,7 +65,7 @@ exit;
 This automatically sets up a dedicated database schema, runs migrations, and seeds default roles and permissions.
 
 
-Step 4: Register Tenant Middleware
+# Step 4: Register Tenant Middleware
 Edit your routes/api.php file to protect routes with the tenant middleware:
 
 use App\Http\Middleware\TenantMiddleware;
@@ -77,8 +77,7 @@ Route::middleware(TenantMiddleware::class)->group(function () {
     });
 });
 
-
-Step 5: Test Multi-Tenancy
+# Step 5: Test Multi-Tenancy
 Start the server and test the subdomain routing:
 
 # Terminal : Test request
