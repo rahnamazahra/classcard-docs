@@ -10,23 +10,12 @@
   "colors": {
     "primary": "#0D9488",
     "light": "#2DD4BF",
-    "dark": "#0F766E",
-    "anchors": ["#2DD4BF", "#0D9488"]
+    "dark": "#0F766E"
   },
   "navigation": [
-    {
-      "group": "Get Started",
-      "pages": [
-        "index",
-        "quickstart"
-      ]
-    },
-    {
-      "group": "Classcard Documentation",
-      "pages": [
-        "overview",
-        "features"
-      ]
-    }
+    "index",
+    "quickstart",
+    "overview",
+    "features"
   ]
 }
