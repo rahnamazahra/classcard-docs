@@ -12,24 +12,20 @@
     "dark": "#0F766E",
     "anchors": ["#2DD4BF", "#0D9488"]
   },
-  "topbarLinks": [
-    {
-      "name": "Support",
-      "url": "mailto:support@pixygroup.com"
-    }
-  ],
   "navigation": [
     {
       "group": "Get Started",
       "pages": [
-        "index",
-        "quickstart"
+        "index"
       ]
     },
     {
-      "group": "Classcard Architecture",
+      "group": "Classcard Documentation",
       "pages": [
-        "introduction"
+        "overview",
+        "features",
+        "workflows",
+        "requirements"
       ]
     }
   ]
