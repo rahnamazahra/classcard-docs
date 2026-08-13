@@ -1,0 +1,316 @@
+---
+title: 'Multi-Tenancy Architecture'
+description: 'Schema-per-tenant data isolation built on Laravel — how every organization is resolved, isolated, and protected from every other'
+---
+
+<Info>
+  This page is the single source of truth for tenancy (`App\Tenancy`, `App\Landlord`). It is written for two audiences at once: **Section 1** is safe to share with clients and prospects; **Sections 2–3** are for engineers, integrators, and security reviewers.
+</Info>
+
+---
+
+## Section 1: Business & Product Overview
+
+### Why our data isolation is different
+
+Many multi-tenant SaaS platforms put every customer's rows in the same tables behind a `tenant_id` column and trust every single query, in every corner of the codebase, to remember to filter by it. One missed `WHERE` clause and one organization's students, invoices, or attendance records leak into another's dashboard. We don't build on that assumption. Every organization on this platform gets **its own physically separate schema** — the isolation is a property of the database itself, not a discipline every developer has to maintain forever.
+
+<CardGroup cols={4}>
+  <Card title="Subdomain-Based Access" icon="globe">
+    Every organization gets its own address — `acme.classcard.app` — and the platform resolves *which* organization's data to use before anything else happens.
+  </Card>
+  <Card title="Physically Isolated Schemas" icon="database">
+    An organization's users, students, invoices, and roles live in a schema no other organization's queries can even see, let alone touch.
+  </Card>
+  <Card title="Fail-Closed by Design" icon="shield-check">
+    If the platform ever forgets to resolve an organization first, the request hard-fails instead of silently running against the wrong — or no — tenant.
+  </Card>
+  <Card title="Grows With Scale" icon="chart-line">
+    Most organizations share a database with isolated schemas; the platform can promote a large organization to its own dedicated database with no application code changes.
+  </Card>
+</CardGroup>
+
+This matters for the same reason it matters in authentication: schools and academies hold children's records, guardian relationships, and payment data under real regulatory scrutiny. "We use a `tenant_id` column and we're careful" is not an answer a data-protection review accepts. "A different organization's query cannot physically reach this schema" is.
+
+### How an organization is set up
+
+<Steps>
+  <Step title="Organization record is created">
+    A new row is created in the central `organizations` table — outside every tenant's data, on the shared "landlord" connection — recording the organization's name, subdomain, and chosen isolation level.
+  </Step>
+  <Step title="Isolated schema is provisioned">
+    A dedicated schema (or, for larger organizations, a dedicated database) is created automatically — empty, and reachable only through that organization's own connection.
+  </Step>
+  <Step title="Tables are built">
+    The organization's own copies of every table — branches, users, roles, students, sessions, audit logs, and more — are created inside that isolated schema.
+  </Step>
+  <Step title="The organization is live">
+    From this point on, `https://acme.classcard.app/...` resolves exclusively to this organization's isolated data, automatically, on every request.
+  </Step>
+</Steps>
+
+<Note>
+  This isn't a manual IT operation — it's a single provisioning call that creates the schema and runs every tenant migration in one step. Onboarding a new customer takes seconds, not a support ticket.
+</Note>
+
+### What this means day to day
+
+- **No cross-organization data ever appears together.** There is no query, report, or admin screen anywhere in the system that *could* accidentally combine two organizations' data — the underlying schemas are separate.
+- **One organization's outage or data issue can't cascade.** Because schemas are independent, a problem confined to one organization's data doesn't reach into anyone else's.
+- **Flexible growth path.** The default (schema-per-tenant, sharing one database server) is the efficient choice for most organizations; a handful of very large customers can be given a fully dedicated database with zero changes to the application itself.
+
+---
+
+## Section 2: Technical Architecture & Implementation
+
+### Design patterns
+
+| Pattern | Where | Why |
+|---|---|---|
+| **Scoped context object** | `App\Tenancy\TenantContext` | Bound as `$this->app->scoped(...)` in [`AppServiceProvider`](app/Providers/AppServiceProvider.php) rather than static state — a scoped binding gives one instance per request/job and is flushed automatically by Laravel between requests (Octane) and between jobs (queue workers), where static properties would leak across them. |
+| **Global middleware** | `App\Tenancy\Http\Middleware\TenantMiddleware` | Prepended to the entire `api` middleware group in [`bootstrap/app.php`](bootstrap/app.php) — tenant resolution isn't something an individual route group can forget to add. |
+| **Fail-closed trait** | `App\Tenancy\Concerns\TenantScoped` | Every tenant model uses it. It doesn't quietly filter with a `WHERE` clause that could be forgotten — it **throws** on any read or write attempted before a tenant context exists. |
+| **Landlord/tenant model split** | `App\Landlord\*` vs. tenant domain models | `Organization` lives permanently on the shared central connection and is the only model that can never be tenant-scoped by construction; every other model lives inside a tenant's own schema. |
+| **Provisioning service** | `App\Landlord\Services\TenantManager` | One class owns the full lifecycle of creating, migrating, and deleting a tenant's isolated schema/database — not scattered across controllers or console commands. |
+
+<Note>
+  These conventions aren't specific to tenancy — they're the same domain template used throughout this codebase (see [Authentication](/authentication) and [Roles & Permissions](/roles-permissions)).
+</Note>
+
+### Request lifecycle: how a request finds its schema
+
+<Steps>
+  <Step title="Subdomain is extracted">
+    `TenantMiddleware::extractSubdomain()` parses the request's `Host` header. `localhost` and bare IPs are rejected outright (no tenant context is possible), and any host with fewer than 3 dot-separated parts (i.e. no subdomain present) is treated the same way.
+  </Step>
+  <Step title="Organization is looked up — on the landlord connection">
+    `Organization::active()->where('subdomain', $subdomain)->first()` runs against the shared central connection. No organization match returns `404 Organization not found`; no parsable subdomain returns `400 Invalid tenant domain`.
+  </Step>
+  <Step title="The database connection is switched">
+    `TenantContext::setOrganization()` repoints every subsequent query at that organization's isolated schema for the rest of the request — see the two isolation strategies below.
+  </Step>
+  <Step title="The request proceeds inside the tenant">
+    Every model that uses `TenantScoped` — `User`, `Role`, `Permission`, `Branch`, `Session`, and every other tenant table — now resolves exclusively against that organization's data.
+  </Step>
+  <Step title="Context is cleared after the response">
+    `TenantMiddleware::terminate()` calls `TenantContext::clear()`, undoing any connection-config mutation so no tenant state can leak into whatever the same worker process handles next.
+  </Step>
+</Steps>
+
+```php
+// app/Tenancy/Http/Middleware/TenantMiddleware.php
+public function handle(Request $request, Closure $next): Response
+{
+    $subdomain = $this->extractSubdomain($request->getHost());
+
+    if (! $subdomain) {
+        return response()->json(['error' => 'Invalid tenant domain'], 400);
+    }
+
+    $organization = Organization::active()->where('subdomain', $subdomain)->first();
+
+    if (! $organization) {
+        return response()->json(['error' => 'Organization not found'], 404);
+    }
+
+    $this->tenantContext->setOrganization($organization);
+
+    return $next($request);
+}
+```
+
+```php
+// bootstrap/app.php
+$middleware->api(prepend: [
+    TenantMiddleware::class,
+]);
+
+// Central/landlord-only endpoints opt OUT of tenancy by construction —
+// they're registered through the 'central' group instead of 'api',
+// so there's no tenant middleware to remember to remove.
+Route::middleware('central')->group(base_path('routes/landlord.php'));
+```
+
+<Warning>
+  Central/landlord-only routes (organization onboarding, platform administration) live in [`routes/landlord.php`](routes/landlord.php) under the `central` middleware group — **not** `api` — specifically so a future contributor can never forget `->withoutMiddleware('tenant')` on a route that must never resolve a tenant. This group doesn't exist yet in the shipped routes but the wiring is already in place.
+</Warning>
+
+### Two isolation strategies
+
+The `organizations.isolation_strategy` column (`schema` | `database`) drives which of these two paths `TenantContext::switchDatabase()` takes — the choice is made once at provisioning time and is invisible to every query written elsewhere in the codebase.
+
+<CodeGroup>
+```php Schema isolation (default)
+private function switchSchema(): void
+{
+    $schemaName = $this->organization->getSchemaName();
+
+    if (DB::getDriverName() === 'pgsql') {
+        DB::statement('SET search_path TO "'.$schemaName.'"');
+        return;
+    }
+
+    // MySQL has no real schema concept, and Laravel's schema builder
+    // (used by migrations) resolves the database name from connection
+    // config — not from a live `USE` statement — so the connection
+    // itself is repointed instead.
+    $connection = config('database.default');
+    config(["database.connections.{$connection}.database" => $schemaName]);
+    DB::purge($connection);
+}
+```
+
+```php Database isolation (large tenants)
+private function switchDatabaseConnection(): void
+{
+    $connectionName = $this->organization->getConnectionName();
+
+    if ($connectionName !== config('database.default')) {
+        config(['database.default' => $connectionName]);
+        DB::purge();
+    }
+}
+```
+</CodeGroup>
+
+<Warning>
+  **Known limitation:** the MySQL schema-isolation path mutates the shared default connection's config directly (`database.connections.<default>.database`) rather than registering a distinct named connection per tenant. This is correct and safe under PHP-FPM (one request per process) but is fragile under any future coroutine-based concurrency model, since the mutation is process-global rather than connection-scoped. A dynamically-registered per-tenant connection is the identified fix, tracked as a follow-up rather than blocking current development.
+</Warning>
+
+### Provisioning a new organization
+
+```php
+// App\Landlord\Services\TenantManager
+public function createOrganization(array $data): Organization
+{
+    $organization = Organization::create([
+        'name' => $data['name'],
+        'subdomain' => $data['subdomain'] ?? Str::slug($data['name']),
+        'isolation_strategy' => $data['isolation_strategy'] ?? 'schema',
+        // ...
+    ]);
+
+    $this->setupTenantDatabase($organization); // CREATE SCHEMA / CREATE DATABASE
+    $this->migrateTenant($organization);       // migrate --path=database/migrations/tenant
+
+    return $organization;
+}
+```
+
+`migrateTenant()` wraps the entire operation in `try/finally`, calling `TenantContext::clear()` and restoring the original connection afterward — provisioning code is held to the same "never leak tenant state" standard as request handling.
+
+### Directory structure
+
+```
+app/
+├── Landlord/
+│   ├── Models/
+│   │   └── Organization.php          # Central connection only — never TenantScoped
+│   └── Services/
+│       └── TenantManager.php         # Create / migrate / delete a tenant's schema
+└── Tenancy/                          # Cross-cutting infrastructure, used by every domain
+    ├── Concerns/
+    │   └── TenantScoped.php          # Trait applied to every tenant-owned model
+    ├── Exceptions/
+    │   └── TenantContextNotInitializedException.php
+    ├── Http/
+    │   └── Middleware/
+    │       └── TenantMiddleware.php  # Global — prepended to the `api` group
+    └── TenantContext.php             # Scoped singleton — the actual DB switch
+
+database/
+├── migrations/
+│   └── 2024_01_01_000100_create_organizations_table.php   # Landlord-only
+└── migrations/tenant/                # Run once per organization, in its own schema
+    ├── 2024_01_01_000200_create_branches_table.php
+    ├── 2024_01_01_000300_create_roles_table.php
+    ├── 2024_01_01_000400_create_permissions_table.php
+    ├── 2024_01_01_000500_create_users_table.php
+    ├── 2024_01_01_000600_create_user_roles_table.php
+    ├── 2024_01_01_000800_create_auth_methods_table.php
+    ├── 2024_01_01_000900_create_otp_challenges_table.php
+    ├── 2024_01_01_001000_create_guardian_student_links_table.php
+    ├── 2024_01_01_001100_create_sessions_table.php
+    ├── 2024_01_01_001200_create_audit_logs_table.php
+    ├── 2024_01_01_001300_create_attendance_time_rules_table.php
+    ├── 2024_01_01_001500_create_role_permissions_table.php
+    └── 2024_01_01_001600_create_user_permissions_table.php
+```
+
+### The `organizations` table (landlord connection)
+
+| Column | Type | Notes |
+|---|---|---|
+| `subdomain` | `string`, unique | The routing key — resolved on every request |
+| `database_name` | `string`, unique | Physical database name used for `database`-strategy tenants |
+| `schema_name` | `string`, unique, nullable | Physical schema name used for `schema`-strategy tenants (Postgres) or repointed database (MySQL) |
+| `isolation_strategy` | `enum('database','schema')` | Defaults to `schema` — set once at provisioning, drives `TenantContext::switchDatabase()` |
+| `status` | `enum('active','inactive','suspended')` | `TenantMiddleware` only resolves `active` organizations — a suspended tenant's subdomain returns `404`, not a suspension-specific error, deliberately |
+| `trial_ends_at` | `timestamp`, nullable | Business-facing metadata, not enforced at the tenancy layer |
+
+### Enforcement: `TenantScoped`
+
+Every tenant-owned model — `Role`, `Permission`, `UserPermission`, `Branch`, and every model in the Auth domain — uses this trait. It hooks Eloquent at the two real extension points:
+
+```php
+// App\Tenancy\Concerns\TenantScoped
+public static function bootTenantScoped(): void
+{
+    static::observe(new class {
+        public function creating(Model $model): void
+        {
+            if (! app(TenantContext::class)->isInitialized()) {
+                throw TenantContextNotInitializedException::forModelCreation();
+            }
+        }
+    });
+
+    static::addGlobalScope('tenant', function (Builder $builder) {
+        if (! app(TenantContext::class)->isInitialized()) {
+            throw TenantContextNotInitializedException::forModelAccess();
+        }
+        // For schema-per-tenant, this is a safety net only — actual
+        // isolation happens via the schema/connection switch above,
+        // not by filtering rows here.
+    });
+}
+```
+
+<Check>
+  This is deliberately a **safety net, not the isolation mechanism itself**. The real isolation is physical (a different schema), so even a hypothetical bug in this trait couldn't cause a cross-tenant leak on its own — it would only fail to catch the *symptom* (a query running with no tenant resolved at all) as early as it does today.
+</Check>
+
+---
+
+## Section 3: Security, Data Isolation & Best Practices
+
+### Defense in depth
+
+<Steps>
+  <Step title="Physical isolation is the primary control">
+    Every tenant's data lives in a schema (or database) a differently-scoped connection cannot query, full stop — this doesn't depend on any query remembering to filter correctly.
+  </Step>
+  <Step title="Fail closed, not open">
+    A tenant model touched with no context established throws immediately (`TenantContextNotInitializedException`), for both reads and writes. A bug that skipped tenant resolution surfaces as a hard `500`-class error instantly — never as a silent cross-tenant read.
+  </Step>
+  <Step title="The landlord connection is a one-way door">
+    The `organizations` table is the only table reachable from a request before a tenant is resolved, and it is structurally incapable of ever being reached *after* a tenant context switches the connection — there is no code path where a tenant-scoped query could accidentally read landlord data or vice versa.
+  </Step>
+  <Step title="State never survives past the request">
+    `TenantContext` is a scoped binding: Laravel forgets it automatically between requests (under Octane) and between jobs (under queue workers), and `TenantMiddleware::terminate()` explicitly clears it as well, so the MySQL connection-config mutation can't outlive the request even without a full container reset.
+  </Step>
+</Steps>
+
+<Warning>
+  Code that runs **outside** an HTTP request — queued jobs, Artisan commands — does not get `TenantMiddleware`'s automatic setup/teardown. Any such code must call `TenantContext::setOrganization()` and wrap the work in `try/finally` with `TenantContext::clear()` itself, exactly as `TenantManager::migrateTenant()` does. Skipping the `finally` block is the one way tenant state can leak within this architecture.
+</Warning>
+
+### Operational guarantees
+
+- **No shared identity or data tables.** There is no global `users`, `students`, or `invoices` table any query — malicious or accidental — could address across organizations.
+- **Suspension is indistinguishable from non-existence, deliberately.** A `suspended` organization's subdomain returns the same `404` as a subdomain that was never registered, giving an outside observer no signal about *why* access failed.
+- **Provisioning and teardown share the same discipline.** `TenantManager::deleteTenant()` drops the physical schema/database before removing the landlord record — there's no state where an `organizations` row exists without a matching schema, or vice versa, left behind by a partial operation.
+
+<Check>
+  Tenant isolation is verified against the live request pipeline under simulated multi-tenant conditions — including the fail-closed behavior of `TenantScoped` and connection cleanup between simulated requests — not just unit-tested against `TenantContext` in isolation.
+</Check>
