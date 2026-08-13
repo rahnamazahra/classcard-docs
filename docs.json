@@ -26,7 +26,8 @@
       {
         "group": "Core Systems & API",
         "pages": [
-          "authentication"
+          "authentication",
+          "multi-tenancy"
         ]
       }
     ]
