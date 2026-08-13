@@ -9,9 +9,9 @@ description: 'Multi-tenant, multi-method authentication built on Laravel — arc
 
 ## Quick Jump
 
-- [Section 1: Business Overview](#section-1-business-product-overview)
-- [Section 2: Technical Architecture](#section-2-technical-architecture-implementation)
-- [Section 3: Security & Isolation](#section-3-security-data-isolation-best-practices)
+- [Section 1: Business Overview](#section-1-business--product-overview)
+- [Section 2: Technical Architecture](#section-2-technical-architecture--implementation)
+- [Section 3: Security & Isolation](#section-3-security--data-isolation)
 
 ---
 
@@ -158,8 +158,26 @@ Most class-management platforms give every organization on the platform the same
 
 ### Code Example: Request & Response
 
-<CodeGroup>
-```bash Email Login Request
+```bash
+# Request
 curl -X POST [https://acme.classcard.app/api/login](https://acme.classcard.app/api/login) \
   -H "Content-Type: application/json" \
   -d '{"email": "owner@acme.com", "password": "password123"}'
+
+# Response (200 OK)
+{
+  "user": {
+    "id": 1,
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "owner@acme.com",
+    "role_type": "org_owner"
+  },
+  "tokens": {
+    "access_token": "eyJ0eXAiOiJKV1QiLCJhbGci...",
+    "refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGci...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+  },
+  "session_id": 42
+}
