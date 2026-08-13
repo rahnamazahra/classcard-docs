@@ -1,0 +1,81 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Classcard Documentation",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.png",
+  "colors": {
+    "primary": "#4F46E5",
+    "light": "#6366F1",
+    "dark": "#3730A3",
+    "anchors": {
+      "from": "#4F46E5",
+      "to": "#06B6D4"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "Website",
+      "url": "https://classcard.app"
+    },
+    {
+      "name": "Support & Help Center",
+      "url": "https://help.classcard.app"
+    }
+  ],
+  "topbarCta": {
+    "name": "Login to Portal",
+    "url": "https://app.classcard.app"
+  },
+  "tabs": [
+    {
+      "name": "Product & Business Guide",
+      "url": "overview"
+    },
+    {
+      "name": "Developer & API Reference",
+      "url": "architecture"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "overview/introduction",
+        "overview/quickstart"
+      ]
+    },
+    {
+      "group": "Product & Core Modules",
+      "pages": [
+        "overview/user-roles",
+        "overview/core-concepts",
+        "overview/feature-inventory"
+      ]
+    },
+    {
+      "group": "Technical Architecture",
+      "pages": [
+        "architecture/system-overview",
+        "architecture/multi-tenancy",
+        "architecture/directory-structure"
+      ]
+    },
+    {
+      "group": "Authentication & Security",
+      "pages": [
+        "auth/overview",
+        "auth/login-methods",
+        "auth/technical-implementation",
+        "auth/api-reference",
+        "auth/security-isolation"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "website": "https://classcard.app",
+    "github": "https://github.com/classcard"
+  }
+}
