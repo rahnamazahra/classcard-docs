@@ -17,10 +17,16 @@
         ]
       },
       {
-        "group": "Classcard Documentation",
+        "group": "Business & Product",
         "pages": [
           "overview",
           "features"
+        ]
+      },
+      {
+        "group": "Core Systems & API",
+        "pages": [
+          "authentication"
         ]
       }
     ]
