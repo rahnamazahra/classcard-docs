@@ -1,131 +1,125 @@
 ---
-title: 'Quick Start Guide'
-description: 'Get up and running with the Classcard backend in 5 minutes.'
+title: 'Quickstart'
+description: 'Get your local Classcard development environment up and running in minutes.'
 ---
 
-# Classcard Backend - Quick Start Guide
+Follow this guide to clone the repository, install dependencies, configure your environment, and spin up the backend application.
 
-A complete, production-ready multi-tenancy foundation with enterprise-grade authentication and authorization for the Classcard education platform.
+## Prerequisites
 
-## 🎯 What's Been Built
+Before starting, ensure you have the following installed on your local machine:
 
-* **Schema-per-Tenant** multi-tenancy (no third-party packages)
-* Subdomain-based tenant routing
-* **5-method authentication** (Phone OTP, Student ID+PIN, Email+Password, Magic Link, SSO)
-* JWT tokens with refresh token rotation and reuse detection
-* Granular **RBAC** with 7 pre-configured roles and 66 permissions
-* Parent-guardian relationship management
-* Immutable audit logging with hash chains
-* Attendance time window management
-* Complete database schema (13 migrations)
-* 10 tenant models with relationships
-* 4 core authentication services
+* **PHP** `>= 8.2` (with standard extensions: `pdo`, `mbstring`, `openssl`, `bcmath`, `xml`)
+* **Composer** `>= 2.x`
+* **Node.js** `>= 18.x` & **NPM**
+* **PostgreSQL** or **MySQL** (PostgreSQL recommended for multi-tenant schema support)
 
 ---
 
-## 🚀 Getting Started (5 Minutes)
+## Getting Started
 
-### Step 1: Install Dependencies
+<Steps>
+  <Step title="Clone the Repository">
+    First, clone the Classcard repository from GitHub and navigate into the project directory:
 
-```
-cd c:\xampp\htdocs\projects\school\school-manager-backend
-composer install
+    ```bash
+    git clone git@github.com:pixy-group/classcard.git
+    cd classcard
+    ```
+  </Step>
 
-🎯 Tip: If composer hangs or prompts for GitHub authentication, press Ctrl+C and run:
+  <Step title="Install PHP & Node Dependencies">
+    Install backend PHP packages via Composer, and frontend asset dependencies via NPM:
 
-```
-composer install --no-dev
+    <CodeGroup>
+    ```bash Composer (Backend)
+    composer install
+    ```
 
+    ```bash NPM (Frontend)
+    npm install
+    ```
+    </CodeGroup>
+  </Step>
 
+  <Step title="Environment Configuration">
+    Copy the example environment configuration file to create your local `.env` file:
 
-### Step 2: Run Landlord Migrations
+    ```bash
+    cp .env.example .env
+    ```
 
-```
-php artisan migrate
+    Open the `.env` file in your editor and update your database credentials and application settings:
 
+    ```ini .env
+    APP_NAME=Classcard
+    APP_ENV=local
+    APP_KEY=
+    APP_URL=http://localhost:8000
 
+    DB_CONNECTION=pgsql
+    DB_HOST=127.0.01
+    DB_PORT=5432
+    DB_DATABASE=classcard_dev
+    DB_USERNAME=postgres
+    DB_PASSWORD=secret
+    ```
+  </Step>
 
-### Step 3: Create First Organization
-Open Laravel tinker:
+  <Step title="Generate Application Key">
+    Generate a new unique application key for encryption and session security:
 
-```
-php artisan tinker
+    ```bash
+    php artisan key:generate
+    ```
+  </Step>
 
-Run the following script inside tinker:
+  <Step title="Run Database Migrations & Seeders">
+    Ensure your database server is running, then execute the migrations to build the landlord/tenant database schemas:
 
-```
-use App\Services\TenantManager;
+    ```bash
+    php artisan migrate --seed
+    ```
 
-$manager = new TenantManager();
+    <Note>
+      The `--seed` flag populates initial roles, permissions, and demo system settings.
+    </Note>
+  </Step>
 
-$org =$manager->createOrganization([
-'name' => 'Acme Academy',
-'subdomain' => 'acme',
-'email' => 'admin@acme.com',
-'phone' => '+1234567890',
-'currency' => 'USD',
-'timezone' => 'America/New_York',
-'isolation_strategy' => 'schema',
-]);
+  <Step title="Start Local Development Servers">
+    Run the Laravel development server alongside Vite for asset bundling:
 
-echo "Organization created: {$org->name}\n";
-echo "Subdomain: {$org->subdomain}\n";
-echo "ID: {$org->id}\n";
+    <CodeGroup>
+    ```bash Laravel Server
+    php artisan serve
+    ```
 
-exit;
+    ```bash Vite Dev Server
+    npm run dev
+    ```
+    </CodeGroup>
 
+    Your local application will now be accessible at `http://127.0.0.1:8000`.
+  </Step>
+</Steps>
 
+---
 
-### Step 4: Register Tenant Middleware
-Edit your routes/api.php file to protect routes with the tenant middleware:
+## Useful Helper Commands
 
-```
-use App\Http\Middleware\TenantMiddleware;
-use App\Services\TenantContext;
+<CardGroup cols={2}>
+  <Card title="Clear Cache" icon="broom">
+    ```bash
+    php artisan config:clear && php artisan cache:clear
+    ```
+  </Card>
+  <Card title="Run Test Suite" icon="vial">
+    ```bash
+    php artisan test
+    ```
+  </Card>
+</CardGroup>
 
-Route::middleware(TenantMiddleware::class)->group(function () {
-Route::get('/test', function () {
-return ['organization' => TenantContext::getOrganization()];
-});
-});
-
-
-
-### Step 5: Test Multi-Tenancy
-
-```
-curl -H "Host: acme.localhost:8000" http://localhost:8000/api/test
-
-🔐 Testing Authentication
-1. Email + Password Login
-
-```
-curl -X POST http://localhost:8000/api/auth/login
-
--H "Content-Type: application/json"
-
--H "Host: acme.localhost:8000"
-
--d '{
-"email": "user@example.com",
-"password": "password123"
-}'
-
-2. Phone OTP Verification
-
-```
-Initiate OTP
-curl -X POST http://localhost:8000/api/auth/phone/initiate
-
--H "Content-Type: application/json"
-
--d '{"phone": "+1234567890"}'
-
-Verify OTP
-curl -X POST http://localhost:8000/api/auth/phone/verify
-
--H "Content-Type: application/json"
-
--H "Host: acme.localhost:8000"
-
--d '{"phone": "+1234567890", "code": "123456"}'
+<Tip>
+  Need help or running into environment issues? Reach out to the development team on Slack or check the **Authentication & Login System** docs for API integration details.
+</Tip>
