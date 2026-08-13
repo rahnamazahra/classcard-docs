@@ -1,0 +1,471 @@
+---
+title: 'Authentication & Login System'
+description: 'Multi-tenant, multi-method authentication built on Laravel — architecture, security model, and integration reference'
+---
+
+<Info>
+  This page is the single source of truth for the Authentication domain (`App\Domains\Auth`). It is written for two audiences at once: **Section 1** is safe to share with clients and prospects; **Sections 2–3** are for engineers, integrators, and security reviewers.
+</Info>
+
+---
+
+## Section 1: Business & Product Overview
+
+### Why our authentication is different
+
+Most class-management platforms give every organization on the platform the same login screen and trust a single shared database to keep tenants apart. We don't. Every request in this system is resolved to **one specific organization's isolated schema before a single row of user data is touched** — authentication itself is tenant-aware from the first line of code that runs, not bolted on afterward.
+
+<CardGroup cols={4}>
+  <Card title="5 Login Methods" icon="key">
+    Password, Phone OTP, Student ID + PIN, Magic Link, and SSO — chosen per user type, not one-size-fits-all.
+  </Card>
+  <Card title="Schema-Isolated Tenants" icon="database">
+    Every organization's users, sessions, and credentials live in a physically separate schema. There is no shared "users" table to leak across.
+  </Card>
+  <Card title="JWT + Server-Side Sessions" icon="shield-check">
+    Short-lived signed tokens for speed, backed by a revocable database session for real security — the best of both models.
+  </Card>
+  <Card title="Tamper-Evident Audit Trail" icon="file-shield">
+    Every login, failure, and credential change is written to a cryptographically hash-chained audit log.
+  </Card>
+</CardGroup>
+
+This combination matters for the industries we serve: schools and academies handle children's data, guardian relationships, and payment information under real regulatory scrutiny (GDPR, COPPA-adjacent expectations, and institutional data-protection policies). A platform that can't prove *who* accessed *what*, *when*, and from *which organization's data* is a liability. Ours can.
+
+### Supported login methods
+
+| Method | Who it's for | What's required |
+|---|---|---|
+| **Email + Password** | Staff, administrators, organization owners | Registered email + password |
+| **Phone OTP** | Guardians and students without email habits | Registered phone number, receives a one-time 6-digit code |
+| **Student ID + PIN** | Young students, front-desk assisted login | Organization-issued Student ID + a 4+ digit PIN |
+| **Magic Link** | Anyone who prefers not to manage a password | Registered email, receives a one-time sign-in link |
+| **SSO (Single Sign-On)** | Staff at organizations with a corporate identity provider | A linked identity with the organization's chosen provider |
+
+<Note>
+  A **session** isn't a separate login method — it's what every method above produces. Signing in by password, OTP, magic link, or SSO all end the same way: a database-backed session plus a signed token pair. This is *why* we can revoke access instantly (logout, password reset, suspicious activity) even though tokens themselves are stateless JWTs — a pure stateless-JWT system can't do that without waiting for tokens to expire.
+</Note>
+
+### How each method works, step by step
+
+<AccordionGroup>
+  <Accordion title="Email + Password">
+    **Use case:** an administrator or teacher signing in from a desktop browser, where remembering a password is normal and expected.
+
+    <Steps>
+      <Step title="User submits credentials">
+        The user enters their email and password on the login screen.
+      </Step>
+      <Step title="System verifies the account">
+        The platform looks up the account within the organization's isolated data and checks the password against a securely hashed copy — the plaintext password is never stored, ever.
+      </Step>
+      <Step title="Session and tokens are issued">
+        On success, the platform creates a tracked session and returns an access token (valid 1 hour) and a refresh token (valid 30 days).
+      </Step>
+      <Step title="User is signed in">
+        The client stores the tokens and uses the access token for subsequent requests, refreshing silently in the background before it expires.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Phone OTP (one-time passcode)">
+    **Use case:** a guardian who primarily uses a phone, in a region where SMS is more reliable than email, or simply wants a passwordless option.
+
+    <Steps>
+      <Step title="User requests a code">
+        The user enters their registered phone number and requests a code.
+      </Step>
+      <Step title="A one-time code is issued">
+        A 6-digit code is generated, valid for 10 minutes, with a limited number of attempts to guess it.
+      </Step>
+      <Step title="User submits the code">
+        The user enters the code they received.
+      </Step>
+      <Step title="Session and tokens are issued">
+        On a correct, unexpired code, the platform signs the user in exactly as it would for password login.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Student ID + PIN">
+    **Use case:** younger students who can't be expected to manage an email inbox or a phone — front-desk staff can also assist with this at a shared kiosk.
+
+    <Steps>
+      <Step title="Student enters their ID and PIN">
+        The organization issues every student a unique Student ID (e.g. `STU-ACME-ACADEMY-001`) and a short PIN.
+      </Step>
+      <Step title="System verifies the pairing">
+        The platform checks the Student ID and PIN together — a PIN alone means nothing without the matching ID.
+      </Step>
+      <Step title="Session and tokens are issued">
+        Same session/token issuance as every other method.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Magic Link">
+    **Use case:** guardians who log in infrequently (checking a balance, viewing a schedule once a month) — a password they'll forget adds friction and generates support tickets; a magic link doesn't.
+
+    <Steps>
+      <Step title="User requests a link">
+        The user enters their email and requests a magic link.
+      </Step>
+      <Step title="A one-time link is issued">
+        A unique, single-use token is generated, valid for 24 hours, and delivered to the user's email.
+      </Step>
+      <Step title="User opens the link">
+        Clicking the link (or submitting its token) signs the user in immediately — no password ever exchanged.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="SSO (Single Sign-On)">
+    **Use case:** organizations that already manage staff identity centrally (Google Workspace, Microsoft Entra ID, Okta) and want one fewer password for their team to manage — and one fewer account for IT to deprovision when someone leaves.
+
+    <Steps>
+      <Step title="Identity is linked">
+        A signed-in user links their account to an external identity provider once (self-service, from account settings).
+      </Step>
+      <Step title="User signs in via the provider">
+        On future visits, the platform verifies the linked provider identity and signs the user in — no platform password involved at all.
+      </Step>
+    </Steps>
+
+    <Tip>
+      Identity verification and self-service linking are fully built today. The provider-specific OAuth redirect handshake (e.g. a literal "Sign in with Google" button) is a standard integration layered on top of this foundation, configured per deployment against the organization's chosen identity provider.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+### Beyond login: the complete account lifecycle
+
+Signing in is one part of the story. The platform also provides, out of the box:
+
+- **Guardian ↔ Student switching** — a parent with multiple enrolled children signs in once and switches between their children's profiles without re-authenticating, exactly like switching Google accounts.
+- **Self-service password reset** — email-based, with all other active sessions automatically revoked the moment a password is changed (so a stolen device is locked out the moment the legitimate owner resets their password).
+- **Silent token refresh** — sessions renew in the background without interrupting the user, while stolen/replayed refresh tokens are detected and trigger an automatic full sign-out everywhere.
+- **Sign out** — revokes the specific session in use, immediately and server-side (not just "forget the token and hope").
+
+---
+
+## Section 2: Technical Architecture & Implementation
+
+### Design patterns
+
+| Pattern | Where | Why |
+|---|---|---|
+| **Action classes** | `Actions/*Action.php` | One class per use case (`AuthenticateByEmailAction`, `RefreshTokenAction`, ...), each with a single `execute()` entry point. This is what scales as the number of use cases grows — a new capability is a new file, not a growing god-service. It also makes every use case trivially unit-testable in isolation. |
+| **Thin Repositories** | `Repositories/UserLookupRepository.php` | Reserved for query shapes that are genuinely reused or non-trivial (e.g. "find one active user by phone/email/student ID/ID"). Eloquent already *is* a query abstraction — wrapping every trivial `Model::find()` call in a repository adds indirection without benefit, so we don't do that reflexively. |
+| **DTOs (Data Transfer Objects)** | `DataTransferObjects/*.php` | `final readonly` classes (`AuthenticatedSessionData`, `TokenPairData`, `DecodedTokenData`) replace raw associative arrays at every Action boundary — a caller gets typed, IDE-autocompleted properties instead of guessing array keys. |
+| **Domain Exceptions** | `Exceptions/*Exception.php` | One exception per distinct failure reason, each carrying its own HTTP status. A single centrally-registered renderer (`bootstrap/app.php`) turns *any* domain exception into the correct JSON response — no controller ever branches on "did this fail, and if so how" itself. |
+| **Form Requests** | `Http/Requests/*Request.php` | Input validation is declared once per endpoint and resolved automatically by Laravel's container before a controller method body ever runs. |
+| **API Resources** | `Http/Resources/*Resource.php` | Every response shape is an explicit allow-list, never a raw model dump — this is the mechanism behind our zero-information-leakage policy (see Section 3). |
+
+<Note>
+  These conventions aren't specific to Auth — they're the standard template every domain in this codebase follows (see the Roles & Permissions module, built the same way).
+</Note>
+
+### Multi-tenancy integration
+
+Authentication doesn't get a tenancy exception — it is subject to the exact same isolation mechanism as every other domain:
+
+<Steps>
+  <Step title="Subdomain resolves the tenant">
+    `TenantMiddleware` (prepended globally to the `api` middleware group) extracts the subdomain from the request host (e.g. `acme.classcard.app`), looks up the matching `Organization` on the **central/landlord** connection, and rejects the request (`400`/`404`) if no organization matches.
+  </Step>
+  <Step title="The database connection is switched">
+    `TenantContext::setOrganization()` repoints the active database connection at that organization's isolated schema — every query issued for the rest of the request, including the login lookup itself, runs against that schema and nothing else.
+  </Step>
+  <Step title="Every Auth model is TenantScoped">
+    `User`, `AuthMethod`, `OtpChallenge`, `Session`, and `GuardianStudentLink` all use the `TenantScoped` trait. It throws immediately if any query or record creation is attempted before a tenant context exists — there is no code path where an Auth query can silently run "unscoped."
+  </Step>
+  <Step title="The auth guard resolves within that context">
+    The `auth:api` guard (see below) queries `Session`/`User` — both `TenantScoped` — so it inherently only ever resolves a user that belongs to the already-established tenant. There is no separate "which tenant is this token for" step, because the token is never even evaluated outside of one.
+  </Step>
+  <Step title="The context is cleared after the response">
+    `TenantMiddleware::terminate()` resets the connection back to the landlord default once the response has been sent, so no tenant state can ever leak into whatever the same worker process handles next.
+  </Step>
+</Steps>
+
+<Warning>
+  The `organizations` table itself lives on the **central/landlord** connection, deliberately outside every tenant's schema — it's the one table in the system a tenant-scoped query could never reach even by mistake.
+</Warning>
+
+#### Dynamic guard resolution
+
+Rather than a bespoke, parallel "current user" mechanism, the platform registers a real Laravel guard:
+
+```php
+// App\Domains\Auth\Providers\AuthServiceProvider::registerGuard()
+Auth::viaRequest('bearer_session', function (Request $request) {
+    $token = $request->bearerToken();
+    if (!$token) return null;
+
+    try {
+        return app(SessionService::class)
+            ->validateAccessToken(app(TokenService::class)->hashToken($token))
+            ->user;
+    } catch (SessionNotFoundException) {
+        return null;
+    }
+});
+```
+
+Because `validateAccessToken()` queries the `Session` model (`TenantScoped`), this closure can only ever resolve a user *after* `TenantMiddleware` has already switched the connection — tenant resolution is a hard prerequisite of authentication, not a parallel concern that could get out of sync with it. This is also what makes `Route::middleware('auth:api')`, `$request->user()`, `Auth::user()`, and Laravel Policies/Gates all work natively throughout the rest of the application.
+
+### Directory structure
+
+```
+app/
+├── Domains/
+│   └── Auth/
+│       ├── Actions/                  # One class per use case
+│       │   ├── AuthenticateByEmailAction.php
+│       │   ├── AuthenticateByPhoneOtpAction.php
+│       │   ├── AuthenticateByStudentIdPinAction.php
+│       │   ├── AuthenticateByMagicLinkAction.php
+│       │   ├── AuthenticateBySsoAction.php
+│       │   ├── RequestPhoneOtpAction.php
+│       │   ├── RequestMagicLinkAction.php
+│       │   ├── InitiatePasswordResetAction.php
+│       │   ├── ResetPasswordAction.php
+│       │   ├── LogoutAction.php
+│       │   ├── RefreshTokenAction.php
+│       │   ├── ListLinkedStudentsAction.php
+│       │   ├── SwitchToLinkedStudentAction.php
+│       │   ├── LinkSsoIdentityAction.php
+│       │   ├── ListSsoIdentitiesAction.php
+│       │   └── UnlinkSsoIdentityAction.php
+│       ├── DataTransferObjects/
+│       │   ├── AuthenticatedSessionData.php
+│       │   ├── TokenPairData.php
+│       │   └── DecodedTokenData.php
+│       ├── Exceptions/               # 15 domain-specific exceptions
+│       ├── Http/
+│       │   ├── Controllers/
+│       │   │   ├── AuthController.php
+│       │   │   ├── SessionController.php
+│       │   │   ├── PasswordResetController.php
+│       │   │   ├── GuardianController.php
+│       │   │   └── SsoIdentityController.php
+│       │   ├── Middleware/
+│       │   │   └── Authenticate.php  # API-only override of Laravel's default
+│       │   ├── Requests/             # One Form Request per endpoint
+│       │   └── Resources/
+│       │       ├── UserResource.php
+│       │       ├── AuthenticatedSessionResource.php
+│       │       ├── LinkedStudentResource.php
+│       │       └── SsoIdentityResource.php
+│       ├── Models/
+│       │   ├── User.php
+│       │   ├── AuthMethod.php
+│       │   ├── OtpChallenge.php
+│       │   ├── Session.php
+│       │   └── GuardianStudentLink.php
+│       ├── Providers/
+│       │   └── AuthServiceProvider.php   # Guard + rate limiter registration
+│       ├── Repositories/
+│       │   └── UserLookupRepository.php
+│       └── Services/
+│           ├── AuthSessionIssuer.php     # Shared "issue a session" logic
+│           ├── OtpService.php
+│           ├── SessionService.php
+│           └── TokenService.php
+├── Landlord/
+│   └── Models/Organization.php           # Central/landlord connection only
+├── Shared/
+│   ├── Audit/                            # Cross-domain audit logging
+│   ├── Exceptions/DomainException.php    # Base class every domain exception extends
+│   └── Http/Controllers/Controller.php
+└── Tenancy/                              # Cross-cutting multi-tenancy infrastructure
+    ├── Concerns/TenantScoped.php
+    ├── Http/Middleware/TenantMiddleware.php
+    └── TenantContext.php
+```
+
+### Technical lifecycle of a request
+
+Every authentication endpoint follows the identical pipeline — using email login as the worked example:
+
+<Steps>
+  <Step title="Route">
+    `POST /api/login` is matched in `routes/api.php`, inside a group carrying `throttle:login`.
+  </Step>
+  <Step title="Middleware">
+    `TenantMiddleware` (global) resolves the organization and switches the database connection. `throttle:login` checks the rate limiter (5 attempts/minute, keyed by identifier + IP).
+  </Step>
+  <Step title="Form Request">
+    `LoginRequest` validates `email` and `password` are present and well-formed before the controller method body executes at all.
+  </Step>
+  <Step title="Controller">
+    `AuthController::login()` resolves `AuthenticateByEmailAction` from the container and calls `execute()` with the validated input.
+  </Step>
+  <Step title="Action">
+    `AuthenticateByEmailAction` resolves the user via `UserLookupRepository`, verifies the password hash, records an audit log entry, and delegates session issuance to `AuthSessionIssuer`.
+  </Step>
+  <Step title="Service + DTO">
+    `AuthSessionIssuer` generates a token pair (`TokenService`), persists a `Session` row (`SessionService`), and returns a typed `AuthenticatedSessionData` DTO — never a raw array.
+  </Step>
+  <Step title="Resource">
+    `AuthenticatedSessionResource` shapes the DTO into the public JSON contract, nesting a `UserResource` for the user object.
+  </Step>
+  <Step title="Response">
+    A `JsonResponse` is returned. If any step above throws a domain exception instead, a single centrally-registered handler renders it — the controller has no error-handling branches of its own.
+  </Step>
+</Steps>
+
+### Endpoint reference
+
+| Method | Path | Auth required | Rate limit |
+|---|---|---|---|
+| `POST` | `/api/login` | No | `login` (5/min) |
+| `POST` | `/api/login/student` | No | `login` |
+| `POST` | `/api/login/sso` | No | `login` |
+| `POST` | `/api/login/otp/request` | No | `login` |
+| `POST` | `/api/login/otp/verify` | No | `login` |
+| `POST` | `/api/login/magic-link/request` | No | `login` |
+| `POST` | `/api/login/magic-link/verify` | No | `login` |
+| `POST` | `/api/password/forgot` | No | `login` |
+| `POST` | `/api/password/reset` | No | `login` |
+| `POST` | `/api/token/refresh` | No (refresh token itself is the credential) | `login` |
+| `POST` | `/api/logout` | Yes (`auth:api`) | `api` (60/min) |
+| `GET` | `/api/me/linked-students` | Yes | `api` |
+| `POST` | `/api/me/switch-student` | Yes | `api` |
+| `POST` | `/api/sso-links` | Yes | `api` |
+| `GET` | `/api/sso-links` | Yes | `api` |
+| `DELETE` | `/api/sso-links/{authMethod}` | Yes | `api` |
+
+### Request/response examples
+
+<CodeGroup>
+```bash Email + Password
+curl -X POST https://acme.classcard.app/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "owner@acme.com", "password": "password123"}'
+```
+
+```json 200 OK
+{
+  "user": {
+    "id": 1,
+    "branch_id": null,
+    "first_name": "Jane",
+    "last_name": "Doe",
+    "email": "owner@acme.com",
+    "phone": "+15550000000",
+    "student_id": null,
+    "role_type": "org_owner",
+    "status": "active",
+    "last_login_at": "2026-08-13T09:00:00.000000Z",
+    "created_at": "2026-01-05T12:00:00.000000Z",
+    "updated_at": "2026-08-13T09:00:00.000000Z",
+    "deleted_at": null
+  },
+  "tokens": {
+    "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+    "refresh_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+  },
+  "session_id": 42
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Phone OTP — request
+curl -X POST https://acme.classcard.app/api/login/otp/request \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+15550000000"}'
+```
+
+```json 200 OK
+{ "message": "OTP sent" }
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Phone OTP — verify
+curl -X POST https://acme.classcard.app/api/login/otp/verify \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+15550000000", "otp": "482913"}'
+```
+
+```json 200 OK
+{ "user": { "...": "..." }, "tokens": { "...": "..." }, "session_id": 43 }
+```
+</CodeGroup>
+
+<CodeGroup>
+```bash Using the access token
+curl -X POST https://acme.classcard.app/api/logout \
+  -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+```
+
+```json 200 OK
+{ "message": "Logged out" }
+```
+</CodeGroup>
+
+### Error responses
+
+Every failure mode maps to one deliberate, typed exception. None of them expose internals:
+
+| Status | Example body | Meaning |
+|---|---|---|
+| `400` | `{"error": "Invalid tenant domain"}` | Host header doesn't resolve to a subdomain at all |
+| `401` | `{"message": "Invalid credentials"}` | Wrong email/password — also returned for "email not found," deliberately, to prevent account enumeration |
+| `403` | `{"message": "Not authorized to access this student profile"}` | Guardian isn't linked to the requested student (also covers expired links and inactive students, indistinguishably) |
+| `404` | `{"error": "Organization not found"}` | Subdomain resolved but no active organization matches |
+| `404` | `{"message": "Auth method not found"}` | SSO identity doesn't exist or doesn't belong to the caller |
+| `409` | `{"message": "This SSO identity is already linked to an account"}` | Provider identity already claimed by another user |
+| `409` | `{"message": "Cannot remove your only remaining sign-in method"}` | Self-lockout prevention |
+| `422` | `{"message": "The password field is required.", "errors": {"password": [...]}}` | Standard Laravel validation failure |
+| `429` | `{"message": "Too Many Attempts."}` | Rate limit exceeded |
+
+<Warning>
+  Tenant-resolution failures (`TenantMiddleware`) use an `{"error": ...}` envelope, while every domain-level failure uses `{"message": ...}`. This predates the centralized exception renderer and is a known inconsistency — harmonizing it is on the backlog, not something to build new integrations around.
+</Warning>
+
+---
+
+## Section 3: Security, Data Isolation & Best Practices
+
+### Tenant data isolation
+
+<Steps>
+  <Step title="Central lookup, tenant execution">
+    The *only* query that ever runs against the shared landlord connection during authentication is the organization lookup itself. Every subsequent query — user, session, OTP challenge, audit log — runs against that organization's schema exclusively.
+  </Step>
+  <Step title="Fail closed, not open">
+    `TenantScoped` doesn't quietly scope queries with a `WHERE` clause that could be forgotten — it **throws** if a tenant context isn't already established, for both reads and writes. A bug that skipped tenant resolution would surface immediately as a hard error, not as a silent cross-tenant leak.
+  </Step>
+  <Step title="No shared identity table">
+    There is no single global `users` table an attacker (or a bug) could query across organizations — `App\Domains\Auth\Models\User` only exists inside each tenant's own schema.
+  </Step>
+</Steps>
+
+### Zero-information-leakage policy
+
+- **API Resources are allow-lists.** `SsoIdentityResource` never returns `secret` or `provider_id`. `LinkedStudentResource` returns only a name, relationship, and access level — no contact, medical, or financial fields, regardless of what's on the underlying model.
+- **Generic failure messages by design.** Email login, phone OTP, and student ID login all return the *same* error for "account doesn't exist" and "credentials are wrong" — an attacker cannot use the API to discover which accounts exist.
+- **No stack traces, ever, in a production response.** Every expected failure is a typed `DomainException` rendered through one centralized handler; every *unexpected* exception falls through to Laravel's standard handler, which only emits stack traces when `APP_DEBUG=true` — never enabled in production.
+- **Ownership is enforced, not assumed.** Unlinking an SSO identity checks `user_id` ownership before allowing the delete — attempting to remove another user's auth method returns the same `404` as it not existing at all, not a `403` that would confirm it exists.
+
+### Security measures
+
+| Control | Implementation |
+|---|---|
+| **Rate limiting** | 5 attempts/minute (by identifier + IP) on every credential-presenting endpoint; 60 requests/minute baseline on everything else |
+| **Password hashing** | bcrypt via Laravel's `Hash` facade — plaintext is never persisted or logged |
+| **Token signing** | JWT (HS256), signed with `APP_KEY`. The signing service now **fails fast at boot** if `APP_KEY` is unset, rather than silently issuing tokens that can never be verified |
+| **Session model** | Every issued token pair is backed by a database `Session` row — access tokens and refresh tokens are stored only as SHA-256 hashes, never in plaintext |
+| **Refresh token rotation** | Every refresh issues a brand-new token pair and retires the old one |
+| **Reuse detection** | Presenting an already-rotated-out refresh token is treated as a stolen-token signal — it revokes **every** session for that user immediately, not just the one in use |
+| **Session revocation** | Logout revokes one session; password reset revokes *all* sessions for that user, immediately |
+| **Self-lockout prevention** | A user cannot unlink their last remaining sign-in method |
+| **Audit logging** | Every login (success and failure), OTP request, password reset, token refresh, profile switch, and SSO link/unlink change is recorded in a hash-chained, tamper-evident audit log — each entry cryptographically references the one before it, so any retroactive edit or deletion is mathematically detectable |
+
+<Check>
+  All of the above is independently verified against the live request/response pipeline (not just unit-tested in isolation) as part of this system's engineering process — including the audit log's hash chain, refresh-token reuse detection, and tenant isolation under simulated multi-tenant conditions.
+</Check>
