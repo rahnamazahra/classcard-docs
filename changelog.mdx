@@ -1,0 +1,17 @@
+---
+title: 'Changelog'
+description: 'Recent changes, fixes, and improvements to the product and documentation.'
+---
+
+<Update label="August 14, 2026">
+  ## Multi-tenancy documentation
+
+  Added a dedicated **Multi-Tenancy Architecture** page under **Core Systems & API**, covering:
+
+  - Subdomain-based tenant resolution and fail-closed behavior when a tenant cannot be resolved.
+  - Schema-per-tenant data isolation, with each organization's records living in its own database schema rather than a shared table filtered by `tenant_id`.
+  - The path from shared-database, isolated-schema tenants to a dedicated database per organization without application code changes.
+  - Reference material for engineers and security reviewers on `App\Tenancy` and `App\Landlord`.
+
+  Added **Multi-Tenancy Architecture** to the **Core Systems & API** navigation group alongside **Authentication & Login System**.
+</Update>
