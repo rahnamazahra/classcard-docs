@@ -193,19 +193,50 @@ VITE_APP_NAME="${APP_NAME}"
   </Step>
 
   <Step title="Run Database Migrations & Seeders">
-    Ensure your database server is running, then execute the migrations to build the landlord/tenant database schemas:
+    Ensure your database server is running, then execute the migrations and seeders to build the landlord/tenant database schemas and load the initial data:
 
     ```bash
-    php artisan migrate --seed
+    php artisan migrate
+    php artisan db:seed
     ```
 
-    <Note>
-      The `--seed` flag populates initial roles, permissions, and demo system settings.
-    </Note>
+    <Warning>
+      Always run `db:seed` after `migrate` in a fresh local environment. The seeder populates the organizations, users, and test credentials the login flows depend on. Without it you will get "Organization not found" or invalid-credential errors when signing in.
+    </Warning>
   </Step>
 
+  <Step title="Map tenant subdomains to localhost">
+    The backend is multi-tenant and resolves the organization from the subdomain of the incoming request. Requests to `127.0.0.1` or `localhost` alone will not resolve to a tenant, so add the tenant subdomains to your hosts file before hitting the app.
 
+    Edit your hosts file (`C:\Windows\System32\drivers\etc\hosts` on Windows, `/etc/hosts` on macOS or Linux — requires admin or `sudo`) and add:
+
+    ```text
+    127.0.0.1  beacon.classcard.test
+    127.0.0.1  acme.classcard.test
+    127.0.0.1  classcard.test
+    ```
+
+    You can now reach a tenant at, for example, `http://beacon.classcard.test:8000`.
+  </Step>
 </Steps>
+
+---
+
+## Test Credentials
+
+Once migrations and seeders have run, sign in to the seeded **Beacon** organization at `http://beacon.classcard.test:8000` to exercise every login method:
+
+| Method | Identifier | Secret / Notes |
+| :--- | :--- | :--- |
+| **Email + Password** | `owner@beacon.com` | `password123` |
+| **Student ID + PIN** | `STU-BEACON-SCHOOL-001` | PIN `1234` |
+| **Phone OTP** | `+1234567890` | In local env, the request response includes a `debug_otp` field with the code. |
+| **Magic Link** | `owner@beacon.com` | Response includes a `debug_token` field so you don't need an inbox. |
+| **SSO** | Under **More sign-in options** | Provider `google` against the seeded linked identity. |
+
+<Note>
+  `debug_otp` and `debug_token` are only returned when `APP_ENV=local`. They are stripped from responses in staging and production.
+</Note>
 
 ---
 

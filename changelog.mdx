@@ -4,6 +4,18 @@ description: 'Recent changes, fixes, and improvements to the product and documen
 ---
 
 <Update label="August 14, 2026">
+  ## All login methods live on the sign-in page
+
+  The frontend sign-in page now exposes every supported login method, not just email + password:
+
+  - **Email + Password** — staff, administrators, organization owners.
+  - **Student ID + PIN** — young students and front-desk assisted logins.
+  - **Phone OTP** — guardians and students without email habits. In local environments the API response includes a `debug_otp` field so you can grab the code without wiring up SMS.
+  - **Magic Link** — low-frequency portal users. In local environments the API response includes a `debug_token` field so you can complete sign-in without hitting a mailbox.
+  - **SSO** — grouped under **More sign-in options** (Google, Entra ID, Okta).
+
+  See [Authentication & Login System](/authentication) for the API contracts behind each method, and [Quickstart](/quickstart) for the local hosts-file, seeder, and test-credential steps required to exercise them end-to-end.
+
   ## Multi-tenancy documentation
 
   Added a dedicated **Multi-Tenancy Architecture** page under **Core Systems & API**, covering:
