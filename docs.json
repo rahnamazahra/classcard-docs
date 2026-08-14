@@ -29,6 +29,12 @@
           "authentication",
           "multi-tenancy"
         ]
+      },
+      {
+        "group": "Changelog",
+        "pages": [
+          "changelog"
+        ]
       }
     ]
   }
